@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block content %}
+<div class="ai-hero"><div><span class="eyebrow">✦ SKILLX AI WORKSPACE</span><h1>Turn your skills into a <span>clear next step.</span></h1><p>Explore practical AI-style tools for career roadmaps, resumes, interviews, quizzes and personalized skill analysis.</p></div><div class="ai-orb">✦<small>AI</small></div></div>
+<div class="ai-grid">
+<a class="ai-card" href="{{url_for('ai_chat')}}"><div class="ai-icon">◉</div><h3>AI Coach</h3><p>Ask questions about Python, SQL, projects, resumes and interviews.</p><b>Open coach →</b></a>
+<a class="ai-card" href="{{url_for('ai_roadmap')}}"><div class="ai-icon">↗</div><h3>Career Roadmap</h3><p>Generate a structured learning path for your target role.</p><b>Build roadmap →</b></a>
+<a class="ai-card" href="{{url_for('ai_resume')}}"><div class="ai-icon">▤</div><h3>AI Resume</h3><p>Create strong summary, skills and project content for your resume.</p><b>Build resume →</b></a>
+<a class="ai-card" href="{{url_for('ai_analyzer')}}"><div class="ai-icon">◌</div><h3>Skill Analyzer</h3><p>Review your current skills and identify useful next areas to practice.</p><b>Analyze skills →</b></a>
+<a class="ai-card" href="{{url_for('ai_interview')}}"><div class="ai-icon">?</div><h3>Interview Lab</h3><p>Practice realistic technical and HR-style questions.</p><b>Start practice →</b></a>
+<a class="ai-card" href="{{url_for('ai_quiz')}}"><div class="ai-icon">✓</div><h3>Quiz Generator</h3><p>Generate quick knowledge checks for any technology or topic.</p><b>Generate quiz →</b></a>
+</div>{% endblock %}

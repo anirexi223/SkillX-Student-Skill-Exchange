@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block content %}
+<div class="hero"><div><div class="logo-big">Skill<span>X</span></div><h1>Learn. Teach. Exchange.</h1><p>Connect with students, share your skills, and learn something new.</p><div class="actions"><a class="btn primary" href="{{url_for('login')}}">Login</a><a class="btn secondary" href="{{url_for('register')}}">Create Account</a></div><a class="admin-link" href="{{url_for('admin_login')}}">Administrator Login</a></div><div class="hero-card"><div class="hero-icon">⇄</div><h3>Skill Exchange</h3><p>Trade knowledge with your student community.</p></div></div>
+{% endblock %}

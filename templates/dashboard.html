@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block content %}
+<div class="page-head"><div><h1>Welcome back, {{current_user.full_name.split(' ')[0]}} 👋</h1><p>Here's what's happening with your skill exchange.</p></div><a class="btn primary" href="{{url_for('explore')}}">Explore Skills</a></div>
+<div class="stats"><div><strong>{{skills|length}}</strong><span>Skills Teaching</span></div><div><strong>{{sessions|length}}</strong><span>Sessions</span></div><div><strong>{{avg if avg else '—'}}</strong><span>Rating</span></div></div>
+<section><h2>Skills Teaching</h2><div class="grid">{% for s in skills %}<a class="card" href="{{url_for('skill_details',id=s.id)}}"><div class="row between"><h3>{{s.name}}</h3><span class="pill">{{s.level}}</span></div><small>{{s.category or 'Uncategorized'}}</small><p>{{s.description}}</p></a>{% else %}<div class="empty">No skills added yet.</div>{% endfor %}</div></section>
+<section><h2>Recent Reviews</h2>{% for r in reviews %}<div class="review"><div><b>{{r.reviewer_name}}</b> <span class="stars">{{'★'*r.rating}}{{'☆'*(5-r.rating)}}</span></div><small>{{r.created_at[:10]}}</small><p>{{r.review}}</p></div>{% else %}<div class="empty">No reviews yet.</div>{% endfor %}</section>
+{% endblock %}

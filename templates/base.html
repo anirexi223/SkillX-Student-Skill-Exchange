@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title or "SkillX AI" }} · Student Skill Exchange</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head>
+<body>
+{% if current_user %}
+<header class="top"><div class="nav-inner"><a class="brand" href="{{ url_for('admin_dashboard' if current_user.role=='admin' else 'dashboard') }}"><span class="brand-mark">S</span><span>Skill<span class="brand-accent">X</span></span><small>AI</small></a>
+<nav>{% if current_user.role=='admin' %}
+<a href="{{url_for('admin_dashboard')}}">Dashboard</a><a href="{{url_for('admin_users')}}">Users</a><a href="{{url_for('admin_skills')}}">Skills</a><a href="{{url_for('admin_requests')}}">Requests</a><a href="{{url_for('admin_sessions')}}">Sessions</a><a href="{{url_for('admin_reviews')}}">Reviews</a><a href="{{url_for('admin_reports')}}">Reports</a>
+{% else %}
+<a href="{{url_for('dashboard')}}">Dashboard</a><a href="{{url_for('explore')}}">Explore</a><a href="{{url_for('my_skills')}}">My Skills</a><a href="{{url_for('requests_page')}}">Requests</a><a href="{{url_for('sessions')}}">Sessions</a><a href="{{url_for('messages')}}">Messages</a><a class="nav-ai" href="{{url_for('ai_home')}}">✦ AI</a><a href="{{url_for('notifications')}}">🔔{% if unread %}<b class="badge">{{unread}}</b>{% endif %}</a><a href="{{url_for('profile')}}">Profile</a>
+{% endif %}</nav>
+<div class="user-mini"><span class="user-dot">{{current_user.full_name[:1]}}</span><span class="user-name">{{current_user.full_name}}</span><a class="logout" href="{{url_for('logout')}}">Logout</a></div></div></header>
+{% endif %}
+<main class="{{'container' if current_user else 'auth-wrap'}}">
+{% with messages=get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="flash {{cat}}">{{msg}}</div>{% endfor %}{% endwith %}
+{% block content %}{% endblock %}</main>
+<footer>SkillX AI · Student Skill Exchange Platform</footer>
+</body></html>

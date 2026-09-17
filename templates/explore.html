@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block content %}
+<div class="page-head"><div><h1>Explore Skills</h1><p>Find students who can teach what you want to learn.</p></div></div>
+<form class="filters" method="get"><input name="q" value="{{search}}" placeholder="Search skills, people, topics..."><select name="category"><option value="">All categories</option>{% for c in categories %}<option value="{{c.name}}" {% if cat==c.name %}selected{% endif %}>{{c.icon}} {{c.name}}</option>{% endfor %}</select><button class="btn primary">Search</button></form>
+<div class="grid">{% for s in skills %}<div class="card"><div class="category">{{s.icon}} {{s.category}}</div><h3>{{s.name}}</h3><p>{{s.description}}</p><div class="person"><div class="avatar">{{s.full_name[0]}}</div><div><b>{{s.full_name}}</b><small>@{{s.username}}</small></div></div><a class="btn outline full" href="{{url_for('skill_details',id=s.id)}}">View Skill</a></div>{% else %}<div class="empty">No matching skills found.</div>{% endfor %}</div>
+{% endblock %}
