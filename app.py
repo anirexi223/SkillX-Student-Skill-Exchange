@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, jsonify, g
 from werkzeug.security import generate_password_hash, check_password_hash
 import os, uuid, threading
 from functools import wraps
 from datetime import datetime
 from dotenv import load_dotenv
+from psycopg_pool import ConnectionPool
 
 try:
     import psycopg
@@ -71,114 +72,186 @@ CREATE TABLE IF NOT EXISTS ai_history(
 
 def uid(): return str(uuid.uuid4())
 
-def get_db():
-    if not psycopg:
+def _create_pool():
+    if not psycopg or not dict_row:
         raise RuntimeError("psycopg is not installed. Run: pip install -r requirements.txt")
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is missing. Add your Supabase PostgreSQL connection string to .env")
-    return psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=10)
+    return ConnectionPool(
+        conninfo=DATABASE_URL,
+        min_size=0,
+        max_size=5,
+        timeout=10,
+        kwargs={"row_factory": dict_row},
+        open=True,
+    )
 
-def q(sql,args=(),one=False):
-    db=get_db()
-    try:
+
+DB_POOL = _create_pool()
+
+
+def q(sql, args=(), one=False):
+    with DB_POOL.connection() as db:
         with db.cursor() as cur:
-            cur.execute(sql,args)
+            cur.execute(sql, args)
             return cur.fetchone() if one else cur.fetchall()
-    finally:
-        db.close()
 
-def execsql(sql,args=()):
-    db=get_db()
-    try:
+
+def execsql(sql, args=()):
+    with DB_POOL.connection() as db:
         with db.cursor() as cur:
-            cur.execute(sql,args)
+            cur.execute(sql, args)
             row = cur.fetchone() if cur.description else None
         db.commit()
         return row
-    finally:
-        db.close()
+
 
 def init_db():
     global _schema_ready
-    if _schema_ready: return
+    if _schema_ready:
+        return
+
     with _schema_lock:
-        if _schema_ready: return
-        db=get_db()
-        try:
+        if _schema_ready:
+            return
+
+        with DB_POOL.connection() as db:
             with db.cursor() as cur:
                 cur.execute(SCHEMA_SQL)
-                for name,icon in CATEGORIES:
-                    cur.execute("INSERT INTO categories(id,name,icon) VALUES(%s,%s,%s) ON CONFLICT(name) DO NOTHING",(uid(),name,icon))
-                users=[
-                  ("a0000000-0000-0000-0000-000000000001","Admin","System Administrator","admin@skillx.edu","Admin@1234","admin","Platform administrator with full access to manage the Skill Exchange Platform."),
-                  ("a0000000-0000-0000-0000-000000000010","sarah_chen","Sarah Chen","sarah@skillx.edu","password123","user","Computer Science major passionate about web development and teaching others."),
-                  ("a0000000-0000-0000-0000-000000000011","marcus_j","Marcus Johnson","marcus@skillx.edu","password123","user","Graphic designer and digital artist. Love sharing creative skills with fellow students."),
-                  ("a0000000-0000-0000-0000-000000000012","aria_patel","Aria Patel","aria@skillx.edu","password123","user","Music and language enthusiast. Fluent in 3 languages and counting!"),
-                  ("a0000000-0000-0000-0000-000000000013","diego_r","Diego Ramirez","diego@skillx.edu","password123","user","Business student and amateur photographer. Always learning new things."),
-                  ("a0000000-0000-0000-0000-000000000014","emma_w","Emma Wilson","emma@skillx.edu","password123","user","Mathematics and physics tutor. Love making complex topics simple."),
-                  ("a0000000-0000-0000-0000-000000000015","liam_k","Liam Kim","liam@skillx.edu","password123","user","Writer and cooking enthusiast. Believes good food brings people together.")]
+
+                for name, icon in CATEGORIES:
+                    cur.execute(
+                        "INSERT INTO categories(id,name,icon) VALUES(%s,%s,%s) "
+                        "ON CONFLICT(name) DO NOTHING",
+                        (uid(), name, icon),
+                    )
+
+                users = [
+                    ("a0000000-0000-0000-0000-000000000001","Admin","System Administrator","admin@skillx.edu","Admin@1234","admin","Platform administrator with full access to manage the Skill Exchange Platform."),
+                    ("a0000000-0000-0000-0000-000000000010","sarah_chen","Sarah Chen","sarah@skillx.edu","password123","user","Computer Science major passionate about web development and teaching others."),
+                    ("a0000000-0000-0000-0000-000000000011","marcus_j","Marcus Johnson","marcus@skillx.edu","password123","user","Graphic designer and digital artist. Love sharing creative skills with fellow students."),
+                    ("a0000000-0000-0000-0000-000000000012","aria_patel","Aria Patel","aria@skillx.edu","password123","user","Music and language enthusiast. Fluent in 3 languages and counting!"),
+                    ("a0000000-0000-0000-0000-000000000013","diego_r","Diego Ramirez","diego@skillx.edu","password123","user","Business student and amateur photographer. Always learning new things."),
+                    ("a0000000-0000-0000-0000-000000000014","emma_w","Emma Wilson","emma@skillx.edu","password123","user","Mathematics and physics tutor. Love making complex topics simple."),
+                    ("a0000000-0000-0000-0000-000000000015","liam_k","Liam Kim","liam@skillx.edu","password123","user","Writer and cooking enthusiast. Believes good food brings people together."),
+                ]
+
                 for u in users:
-                    cur.execute("""INSERT INTO profiles(id,username,full_name,email,password_hash,role,bio) VALUES(%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(username) DO NOTHING""",(u[0],u[1],u[2],u[3],generate_password_hash(u[4]),u[5],u[6]))
-                skill_data=[
-                  ("sarah_chen","React Development","Programming","Advanced","Learn modern React with hooks, context, and state management."),
-                  ("sarah_chen","Python Programming","Programming","Intermediate","Python fundamentals including data structures, OOP, and pandas."),
-                  ("sarah_chen","Git & Version Control","Programming","Beginner","Master Git workflows, branching, merging, and collaboration."),
-                  ("marcus_j","UI/UX Design","Design","Advanced","User-centered design, wireframing, prototyping, and Figma."),
-                  ("marcus_j","Photoshop Basics","Design","Intermediate","Photo editing, digital art creation, and design fundamentals."),
-                  ("marcus_j","Logo Design","Design","Intermediate","Create memorable logos from concept to final vector design."),
-                  ("aria_patel","Spanish Language","Languages","Advanced","Conversational Spanish, grammar, vocabulary, and culture."),
-                  ("aria_patel","Piano Lessons","Music","Intermediate","Learn piano basics, sheet music, and favorite songs."),
-                  ("aria_patel","French Language","Languages","Intermediate","French conversation, grammar, and pronunciation."),
-                  ("diego_r","Photography Fundamentals","Photography","Intermediate","Composition, lighting, and camera settings."),
-                  ("diego_r","Digital Marketing","Business","Beginner","Social media marketing, SEO basics, and content strategy."),
-                  ("emma_w","Calculus","Mathematics","Advanced","Limits, derivatives, and integrals with real-world examples."),
-                  ("emma_w","Linear Algebra","Mathematics","Intermediate","Vectors, matrices, eigenvalues, and data science applications."),
-                  ("emma_w","Physics Mechanics","Science","Intermediate","Motion, forces, energy, and momentum."),
-                  ("liam_k","Creative Writing","Writing","Intermediate","Storytelling, character development, and finding your voice."),
-                  ("liam_k","Italian Cooking","Cooking","Beginner","Authentic pasta, risotto, and Italian dishes from scratch.")]
-                for username,name,cat,level,desc in skill_data:
-                    cur.execute("SELECT id FROM profiles WHERE username=%s",(username,)); user=cur.fetchone()
-                    cur.execute("SELECT id FROM categories WHERE name=%s",(cat,)); category=cur.fetchone()
+                    cur.execute(
+                        """INSERT INTO profiles
+                           (id,username,full_name,email,password_hash,role,bio)
+                           VALUES(%s,%s,%s,%s,%s,%s,%s)
+                           ON CONFLICT(username) DO NOTHING""",
+                        (u[0], u[1], u[2], u[3], generate_password_hash(u[4]), u[5], u[6]),
+                    )
+
+                skill_data = [
+                    ("sarah_chen","React Development","Programming","Advanced","Learn modern React with hooks, context, and state management."),
+                    ("sarah_chen","Python Programming","Programming","Intermediate","Python fundamentals including data structures, OOP, and pandas."),
+                    ("sarah_chen","Git & Version Control","Programming","Beginner","Master Git workflows, branching, merging, and collaboration."),
+                    ("marcus_j","UI/UX Design","Design","Advanced","User-centered design, wireframing, prototyping, and Figma."),
+                    ("marcus_j","Photoshop Basics","Design","Intermediate","Photo editing, digital art creation, and design fundamentals."),
+                    ("marcus_j","Logo Design","Design","Intermediate","Create memorable logos from concept to final vector design."),
+                    ("aria_patel","Spanish Language","Languages","Advanced","Conversational Spanish, grammar, vocabulary, and culture."),
+                    ("aria_patel","Piano Lessons","Music","Intermediate","Learn piano basics, sheet music, and favorite songs."),
+                    ("aria_patel","French Language","Languages","Intermediate","French conversation, grammar, and pronunciation."),
+                    ("diego_r","Photography Fundamentals","Photography","Intermediate","Composition, lighting, and camera settings."),
+                    ("diego_r","Digital Marketing","Business","Beginner","Social media marketing, SEO basics, and content strategy."),
+                    ("emma_w","Calculus","Mathematics","Advanced","Limits, derivatives, and integrals with real-world examples."),
+                    ("emma_w","Linear Algebra","Mathematics","Intermediate","Vectors, matrices, eigenvalues, and data science applications."),
+                    ("emma_w","Physics Mechanics","Science","Intermediate","Motion, forces, energy, and momentum."),
+                    ("liam_k","Creative Writing","Writing","Intermediate","Storytelling, character development, and finding your voice."),
+                    ("liam_k","Italian Cooking","Cooking","Beginner","Authentic pasta, risotto, and Italian dishes from scratch."),
+                ]
+
+                for username, name, cat, level, desc in skill_data:
+                    cur.execute("SELECT id FROM profiles WHERE username=%s", (username,))
+                    user = cur.fetchone()
+                    cur.execute("SELECT id FROM categories WHERE name=%s", (cat,))
+                    category = cur.fetchone()
+
                     if user and category:
-                        cur.execute("SELECT 1 FROM skills WHERE user_id=%s AND name=%s",(user['id'],name))
+                        cur.execute(
+                            "SELECT 1 FROM skills WHERE user_id=%s AND name=%s",
+                            (user["id"], name),
+                        )
                         if not cur.fetchone():
-                            cur.execute("INSERT INTO skills(id,user_id,name,category_id,level,description) VALUES(%s,%s,%s,%s,%s,%s)",(uid(),user['id'],name,category['id'],level,desc))
+                            cur.execute(
+                                """INSERT INTO skills
+                                   (id,user_id,name,category_id,level,description)
+                                   VALUES(%s,%s,%s,%s,%s,%s)""",
+                                (uid(), user["id"], name, category["id"], level, desc),
+                            )
+
             db.commit()
-            _schema_ready=True
-        finally:
-            db.close()
+
+        _schema_ready = True
+
 
 @app.before_request
-def bootstrap():
-    if not _schema_ready:
-        init_db()
+def load_current_user():
+    g.current_user = None
+    g.unread = 0
+
+    uid_ = session.get("uid")
+    if not uid_:
+        return
+
+    row = q(
+        """SELECT p.*,
+                  (SELECT COUNT(*)
+                   FROM notifications n
+                   WHERE n.user_id = p.id
+                     AND n.is_read = FALSE) AS unread_count
+           FROM profiles p
+           WHERE p.id = %s""",
+        (uid_,),
+        one=True,
+    )
+
+    if row:
+        g.current_user = row
+        g.unread = row["unread_count"]
+
 
 @app.context_processor
 def inject():
-    user=None; unread=0
-    if session.get("uid"):
-        user=q("SELECT * FROM profiles WHERE id=%s",(session["uid"],),one=True)
-        if user:
-            unread=q("SELECT COUNT(*) c FROM notifications WHERE user_id=%s AND is_read=FALSE",(session["uid"],),one=True)["c"]
-    return dict(current_user=user, unread=unread)
+    return {
+        "current_user": g.current_user,
+        "unread": g.unread,
+    }
+
 
 def login_required(f):
     @wraps(f)
-    def w(*a,**kw):
-        if not session.get("uid"): return redirect(url_for("login",next=request.path))
-        u=q("SELECT * FROM profiles WHERE id=%s",(session["uid"],),one=True)
-        if not u or not u["is_active"]: session.clear(); return redirect(url_for("login"))
-        return f(*a,**kw)
+    def w(*a, **kw):
+        if not session.get("uid"):
+            return redirect(url_for("login", next=request.path))
+
+        u = g.current_user
+        if not u or not u["is_active"]:
+            session.clear()
+            return redirect(url_for("login"))
+
+        return f(*a, **kw)
+
     return w
+
 
 def admin_required(f):
     @wraps(f)
-    def w(*a,**kw):
-        if not session.get("uid"): return redirect(url_for("admin_login"))
-        u=q("SELECT * FROM profiles WHERE id=%s",(session["uid"],),one=True)
-        if not u or u["role"]!="admin": abort(403)
-        return f(*a,**kw)
+    def w(*a, **kw):
+        if not session.get("uid"):
+            return redirect(url_for("admin_login"))
+
+        u = g.current_user
+        if not u or u["role"] != "admin":
+            abort(403)
+
+        return f(*a, **kw)
+
     return w
+
 
 def notify(user_id,title,message,typ="general",related=None):
     execsql("INSERT INTO notifications(id,user_id,type,title,message,related_id) VALUES(%s,%s,%s,%s,%s,%s)",(uid(),user_id,typ,title,message,related))
@@ -316,7 +389,8 @@ def requests_page():
     return render_template("requests.html",sent=sent,received=received,my_skills=mine)
 
 def current_name():
-    u=q("SELECT full_name FROM profiles WHERE id=%s",(session["uid"],),one=True); return u["full_name"] if u else "A user"
+    u = g.current_user
+    return u["full_name"] if u else "A user"
 
 @app.post("/requests/<id>/<action>")
 @login_required
@@ -452,7 +526,7 @@ def admin_users():
         id=request.form["id"]; action=request.form["action"]
         if id==session["uid"]: flash("You cannot deactivate the current admin.","error")
         else:
-            execsql("UPDATE profiles SET is_active=%s WHERE id=%s",(1 if action=="activate" else 0,id)); flash("User status updated.","success")
+            execsql("UPDATE profiles SET is_active=%s WHERE id=%s",(True if action=="activate" else False,id)); flash("User status updated.","success")
         return redirect(url_for("admin_users"))
     search=request.args.get("q","")
     users=q("SELECT * FROM profiles WHERE role='user' AND (full_name LIKE %s OR username LIKE %s OR email LIKE %s) ORDER BY created_at DESC",(f"%{search}%",)*3)
@@ -603,6 +677,14 @@ def ai_chat():
 def forbidden(e): return render_template("error.html",code=403,message="You do not have permission to access this page."),403
 @app.errorhandler(404)
 def not_found(e): return render_template("error.html",code=404,message="The page you requested was not found."),404
+
+def close_pool():
+    try:
+        DB_POOL.close()
+    except Exception:
+        pass
+
+
 
 if __name__=="__main__":
     init_db()
