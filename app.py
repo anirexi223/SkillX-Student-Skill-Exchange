@@ -460,14 +460,47 @@ def review(id):
 def messages():
     uid_=session["uid"]; to=request.args.get("to","")
     if request.method=="POST":
-        receiver=request.form["receiver_id"]; content=request.form["content"].strip()
-        if content: execsql("INSERT INTO messages(id,sender_id,receiver_id,content) VALUES(%s,%s,%s,%s)",(uid(),receiver,content)); notify(receiver,"New message",f"{current_name()} sent you a message.","message")
+        receiver=request.form["receiver_id"].strip()
+        content=request.form.get("content","").strip()
+        target=q(
+            "SELECT id FROM profiles WHERE id=%s AND is_active=TRUE",
+            (receiver,),
+            one=True
+        )
+        if receiver == uid_:
+            flash("You cannot message yourself.","error")
+            return redirect(url_for("messages"))
+        if not target:
+            flash("Invalid recipient.","error")
+            return redirect(url_for("messages"))
+        if content:
+            execsql(
+                "INSERT INTO messages(id,sender_id,receiver_id,content) VALUES(%s,%s,%s,%s)",
+                (uid(), uid_, receiver, content)
+            )
+            notify(
+                receiver,
+                "New message",
+                f"{current_name()} sent you a message.",
+                "message"
+            )
         return redirect(url_for("messages",to=receiver))
-    users=q("SELECT * FROM profiles WHERE id!=%s AND is_active=TRUE ORDER BY full_name",(uid_,))
-    if not to and users: to=users[0]["id"]
+    users=q(
+        "SELECT * FROM profiles WHERE id!=%s AND is_active=TRUE ORDER BY full_name",
+        (uid_,)
+    )
+    valid_ids={u["id"] for u in users}
+    if to and to not in valid_ids:
+        to=""
+    if not to and users:
+        to=users[0]["id"]
     thread=q("""SELECT m.*,p.full_name sender_name FROM messages m JOIN profiles p ON p.id=m.sender_id
                 WHERE (m.sender_id=%s AND m.receiver_id=%s) OR (m.sender_id=%s AND m.receiver_id=%s) ORDER BY m.created_at""",(uid_,to,to,uid_)) if to else []
-    if to: execsql("UPDATE messages SET read=TRUE WHERE receiver_id=%s AND sender_id=%s",(uid_,to))
+    if to:
+        execsql(
+            'UPDATE messages SET "read"=TRUE WHERE receiver_id=%s AND sender_id=%s',
+            (uid_, to)
+        )
     return render_template("messages.html",users=users,thread=thread,to=to)
 
 @app.route("/profile")
