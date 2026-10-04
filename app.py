@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from werkzeug.security import generate_password_hash, check_password_hash
 import os, uuid, threading
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from psycopg_pool import ConnectionPool
 
@@ -217,9 +217,22 @@ def load_current_user():
 @app.context_processor
 def inject():
     return {
-        "current_user": g.current_user,
-        "unread": g.unread,
+        "current_user": getattr(g, "current_user", None),
+        "unread": getattr(g, "unread", 0),
     }
+
+
+@app.template_filter("isoformat")
+def isoformat_filter(dt):
+    if not dt:
+        return ""
+    if isinstance(dt, str):
+        if not dt.endswith("Z") and "+" not in dt and "-" not in dt[10:]:
+            return dt.replace(" ", "T") + "Z"
+        return dt
+    if hasattr(dt, "tzinfo") and dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
 
 
 def login_required(f):
@@ -496,6 +509,14 @@ def messages():
         to=users[0]["id"]
     thread=q("""SELECT m.*,p.full_name sender_name FROM messages m JOIN profiles p ON p.id=m.sender_id
                 WHERE (m.sender_id=%s AND m.receiver_id=%s) OR (m.sender_id=%s AND m.receiver_id=%s) ORDER BY m.created_at""",(uid_,to,to,uid_)) if to else []
+    for m in thread:
+        ca = m.get("created_at")
+        if ca:
+            if hasattr(ca, "tzinfo") and ca.tzinfo is None:
+                ca = ca.replace(tzinfo=timezone.utc)
+            m["created_at_iso"] = ca.isoformat() if hasattr(ca, "isoformat") else str(ca)
+        else:
+            m["created_at_iso"] = ""
     if to:
         execsql(
             'UPDATE messages SET "read"=TRUE WHERE receiver_id=%s AND sender_id=%s',

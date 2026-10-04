@@ -75,9 +75,11 @@
                     {{ m.content }}
                 </span>
 
-                <small>
-                    {% if m.created_at %}
+                <small class="msg-time" data-time="{{ m.created_at_iso or (m.created_at | isoformat) }}">
+                    {% if m.created_at and m.created_at.strftime %}
                         {{ m.created_at.strftime('%H:%M') }}
+                    {% else %}
+                        {{ m.created_at or '' }}
                     {% endif %}
                 </small>
 
@@ -126,5 +128,27 @@
     </section>
 
 </div>
+
+<script>
+(function() {
+    function formatMessageTimes() {
+        document.querySelectorAll('.msg-time[data-time]').forEach(function(el) {
+            var raw = el.getAttribute('data-time');
+            if (!raw) return;
+            var d = new Date(raw);
+            if (isNaN(d.getTime())) return;
+            el.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            el.title = d.toLocaleString();
+        });
+    }
+
+    formatMessageTimes();
+
+    var thread = document.querySelector('.thread');
+    if (thread) {
+        thread.scrollTop = thread.scrollHeight;
+    }
+})();
+</script>
 
 {% endblock %}
